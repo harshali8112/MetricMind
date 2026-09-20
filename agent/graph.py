@@ -5,13 +5,14 @@ from langgraph.graph import StateGraph, START, END
 
 from agent.tools import (
     get_metric,
-    get_business_data,
     compare_business_data
 )
 
+from agent.intent import extract_intent
+
 
 # =========================================================
-# STATE
+# AGENT STATE
 # =========================================================
 
 class AgentState(TypedDict):
@@ -30,136 +31,65 @@ llm = ChatOllama(
 
 
 # =========================================================
-# INTENT EXTRACTION
-# =========================================================
-
-def extract_intent(question: str):
-    """
-    Extract basic business intent from the user's question.
-
-    Current supported:
-    - Region
-    - Previous quarter
-    - Current quarter
-    - Metric
-    """
-
-    question_lower = question.lower()
-
-    # -------------------------
-    # Region
-    # -------------------------
-
-    if "europe" in question_lower:
-        region = "Europe"
-
-    elif "asia" in question_lower:
-        region = "Asia"
-
-    else:
-        region = None
-
-
-    # -------------------------
-    # Quarters
-    # -------------------------
-
-    previous_quarter = None
-    current_quarter = None
-
-    if "q2" in question_lower and "q3" in question_lower:
-
-        previous_quarter = "Q2"
-        current_quarter = "Q3"
-
-    elif "q1" in question_lower and "q2" in question_lower:
-
-        previous_quarter = "Q1"
-        current_quarter = "Q2"
-
-
-    # -------------------------
-    # Metric
-    # -------------------------
-
-    if "margin" in question_lower:
-        metric = "margin"
-
-    elif "revenue" in question_lower:
-        metric = "revenue"
-
-    elif "cost" in question_lower:
-        metric = "cost"
-
-    elif "churn" in question_lower:
-        metric = "churn"
-
-    else:
-        metric = None
-
-
-    return {
-        "region": region,
-        "previous_quarter": previous_quarter,
-        "current_quarter": current_quarter,
-        "metric": metric
-    }
-
-
-# =========================================================
-# PROCESS QUESTION
+# PROCESS USER QUESTION
 # =========================================================
 
 def process_question(state: AgentState):
 
     question = state["question"]
 
-    # -----------------------------------------
-    # Extract user intent
-    # -----------------------------------------
+    # -----------------------------------------------------
+    # STEP 1: Extract intent
+    # -----------------------------------------------------
 
     intent = extract_intent(question)
 
     region = intent["region"]
+    metric = intent["metric"]
     previous_quarter = intent["previous_quarter"]
     current_quarter = intent["current_quarter"]
-    metric = intent["metric"]
+    intent_type = intent["intent"]
 
 
     # =====================================================
-    # CASE 1: COMPARISON QUESTION
+    # COMPARISON QUERY
     # =====================================================
 
     if (
-        region
+        intent_type == "comparison"
+        and region
+        and metric
         and previous_quarter
         and current_quarter
-        and metric
     ):
 
-        # -----------------------------------------
-        # Get semantic metric definition
-        # -----------------------------------------
+        # -------------------------------------------------
+        # STEP 2: Get metric definition
+        # -------------------------------------------------
 
         metric_definition = get_metric.invoke({
             "metric_name": metric
         })
 
 
-        # -----------------------------------------
-        # Get verified business comparison
-        # -----------------------------------------
+        # -------------------------------------------------
+        # STEP 3: Get verified business analysis
+        # -------------------------------------------------
 
         comparison_data = compare_business_data.invoke({
+
             "region": region,
+
             "previous_quarter": previous_quarter,
+
             "current_quarter": current_quarter
+
         })
 
 
-        # -----------------------------------------
-        # Give verified information to LLM
-        # -----------------------------------------
+        # -------------------------------------------------
+        # STEP 4: Give verified data to LLM
+        # -------------------------------------------------
 
         prompt = f"""
 You are the AI Orchestrator of MetricMind,
@@ -168,27 +98,39 @@ an Enterprise Business Intelligence system.
 USER QUESTION:
 {question}
 
+
 EXTRACTED INTENT:
 
 Region: {region}
-Previous Quarter: {previous_quarter}
-Current Quarter: {current_quarter}
+
 Metric: {metric}
 
+Previous Quarter: {previous_quarter}
+
+Current Quarter: {current_quarter}
+
+
 SEMANTIC LAYER METRIC DEFINITION:
+
 {metric_definition}
 
+
 VERIFIED BUSINESS ANALYSIS:
+
 {comparison_data}
 
-Your task is to explain the result using ONLY
-the verified information above.
+
+YOUR TASK:
+
+Explain the verified business analysis
+to the user in simple and concise language.
+
 
 IMPORTANT RULES:
 
 1. The VERIFIED BUSINESS ANALYSIS is authoritative.
 
-2. Do NOT recalculate numbers.
+2. Do NOT recalculate any numbers.
 
 3. Do NOT create new numbers.
 
@@ -198,27 +140,38 @@ IMPORTANT RULES:
 
 6. Do NOT mention competition, inflation,
    tariffs, customer behavior, market conditions,
-   or any other cause unless explicitly provided
-   in the verified data.
+   or any other cause unless explicitly present
+   in the verified business analysis.
 
-7. Keep the answer concise.
+7. Use only the information provided above.
 
-Return EXACTLY this structure:
+8. Keep the answer concise.
+
+
+RETURN EXACTLY THIS STRUCTURE:
+
 
 Summary:
 <one sentence>
+
 
 Evidence:
 - Revenue: <verified change>
 - Cost: <verified change>
 - Margin: <verified change>
 
+
 Reason:
-<explain why the margin changed using only
-the verified data>
+<explain the change using only the verified data>
 """
 
+
+        # -------------------------------------------------
+        # STEP 5: LLM explanation
+        # -------------------------------------------------
+
         response = llm.invoke(prompt)
+
 
         return {
             "question": question,
@@ -227,7 +180,7 @@ the verified data>
 
 
     # =====================================================
-    # CASE 2: METRIC DEFINITION QUESTION
+    # METRIC LOOKUP
     # =====================================================
 
     elif metric:
@@ -241,21 +194,33 @@ the verified data>
 You are the AI Orchestrator of MetricMind.
 
 USER QUESTION:
+
 {question}
 
+
 SEMANTIC LAYER RESULT:
+
 {metric_result}
 
-Answer using ONLY the Semantic Layer result.
 
-Rules:
+Answer the user's question using ONLY
+the Semantic Layer result.
 
-- Do not invent numbers.
-- Do not invent business facts.
-- Keep the answer concise.
+
+RULES:
+
+1. Do not invent numbers.
+
+2. Do not invent business facts.
+
+3. Do not infer unsupported causes.
+
+4. Keep the answer concise.
 """
 
+
         response = llm.invoke(prompt)
+
 
         return {
             "question": question,
@@ -264,13 +229,14 @@ Rules:
 
 
     # =====================================================
-    # CASE 3: INFORMATION NOT AVAILABLE
+    # UNSUPPORTED QUERY
     # =====================================================
 
     else:
 
         return {
             "question": question,
+
             "answer": (
                 "I could not identify a supported business "
                 "metric, region, or time period from the question."
@@ -279,24 +245,28 @@ Rules:
 
 
 # =========================================================
-# LANGGRAPH
+# LANGGRAPH WORKFLOW
 # =========================================================
 
 builder = StateGraph(AgentState)
+
 
 builder.add_node(
     "process_question",
     process_question
 )
 
+
 builder.add_edge(
     START,
     "process_question"
 )
 
+
 builder.add_edge(
     "process_question",
     END
 )
+
 
 graph = builder.compile()

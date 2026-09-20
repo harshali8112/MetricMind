@@ -1,23 +1,77 @@
-from agent.intent import extract_intent
+from agent.graph import graph
 
 
-questions = [
-    "Why did Asian margins change from Q2 to Q3?",
-    "Compare European margin between Q2 and Q3.",
-    "What happened to Asia's margin in Q3?",
-    "Show me European revenue from Q1 to Q2."
-]
+# =========================================================
+# METRICMIND
+# =========================================================
+
+print("\n========================================")
+print("              METRICMIND")
+print("========================================")
+
+print("\nEnterprise Analytics & Agentic AI")
+
+print("\nAsk a business question.")
+print("Example:")
+print("Why did Asian margins change from Q2 to Q3?")
+
+print("\nType 'exit' to quit.")
 
 
-for question in questions:
+# =========================================================
+# CONTINUOUS QUESTION LOOP
+# =========================================================
 
-    print("\n========================================")
+while True:
 
-    print("Question:")
-    print(question)
+    question = input("\nAsk MetricMind: ").strip()
 
-    print("\nExtracted Intent:")
 
-    intent = extract_intent(question)
+    # -----------------------------------------------------
+    # EXIT
+    # -----------------------------------------------------
 
-    print(intent)
+    if question.lower() == "exit":
+
+        print("\nExiting MetricMind...")
+
+        break
+
+
+    # -----------------------------------------------------
+    # EMPTY QUESTION
+    # -----------------------------------------------------
+
+    if not question:
+
+        print("\nPlease enter a question.")
+
+        continue
+
+
+    # -----------------------------------------------------
+    # RUN LANGGRAPH
+    # -----------------------------------------------------
+
+    result = graph.invoke({
+
+        "question": question,
+
+        "answer": ""
+
+    })
+
+
+    # -----------------------------------------------------
+    # DISPLAY ANSWER
+    # -----------------------------------------------------
+
+    print("\n----------------------------------------")
+
+    print("AI Orchestrator Answer:")
+
+    print("----------------------------------------")
+
+    print(result["answer"])
+
+    print("----------------------------------------")
