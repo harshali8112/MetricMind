@@ -15,7 +15,7 @@ print("\nAsk a business question.")
 print("Example:")
 print("Why did Asian margins change from Q2 to Q3?")
 
-print("\nType 'exit' to quit.")
+print("\nType 'exit' or 'quit' to stop.")
 
 
 # =========================================================
@@ -26,20 +26,23 @@ while True:
 
     question = input("\nAsk MetricMind: ").strip()
 
-
     # -----------------------------------------------------
-    # EXIT
+    # EXIT COMMANDS
     # -----------------------------------------------------
 
-    if question.lower() == "exit":
+    if question.lower() in [
+        "exit",
+        "exit()",
+        "quit",
+        "quit()"
+    ]:
 
         print("\nExiting MetricMind...")
 
         break
 
-
     # -----------------------------------------------------
-    # EMPTY QUESTION
+    # EMPTY INPUT
     # -----------------------------------------------------
 
     if not question:
@@ -48,19 +51,14 @@ while True:
 
         continue
 
-
     # -----------------------------------------------------
     # RUN LANGGRAPH
     # -----------------------------------------------------
 
     result = graph.invoke({
-
         "question": question,
-
         "answer": ""
-
     })
-
 
     # -----------------------------------------------------
     # DISPLAY ANSWER

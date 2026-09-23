@@ -1,80 +1,184 @@
 import re
 
 
-def extract_intent(question: str):
+# =========================================================
+# BUSINESS LANGUAGE NORMALIZATION
+# =========================================================
+
+METRIC_SYNONYMS = {
+    "revenue": [
+        "revenue",
+        "revenues",
+        "sales",
+        "sale",
+        "income"
+    ],
+
+    "margin": [
+        "margin",
+        "margins",
+        "profitability",
+        "profit margin",
+        "profitability rate"
+    ],
+
+    "cost": [
+        "cost",
+        "costs",
+        "expense",
+        "expenses"
+    ],
+
+    "churn": [
+        "churn",
+        "customer churn",
+        "attrition"
+    ]
+}
+
+
+REGION_SYNONYMS = {
+    "Europe": [
+        "europe",
+        "european"
+    ],
+
+    "Asia": [
+        "asia",
+        "asian"
+    ]
+}
+
+
+# =========================================================
+# FIND METRIC
+# =========================================================
+
+def extract_metric(question_lower):
     """
-    Extract structured business intent from a natural-language question.
-
-    Returns:
-        region
-        metric
-        previous_quarter
-        current_quarter
-        intent
+    Convert natural business language into
+    a standard MetricMind metric.
     """
 
-    question_lower = question.lower()
+    # Check longer phrases first
+    # Example: "profit margin" before "margin"
 
-    # =====================================================
-    # REGION
-    # =====================================================
+    metric_patterns = [
 
-    region = None
+        ("margin", [
+            "profit margin",
+            "profitability rate",
+            "profitability",
+            "margins",
+            "margin"
+        ]),
 
-    if re.search(r"\beurope\b|\beuropean\b", question_lower):
-        region = "Europe"
+        ("revenue", [
+            "revenue",
+            "revenues",
+            "sales",
+            "sale",
+            "income"
+        ]),
 
-    elif re.search(r"\basia\b|\basian\b", question_lower):
-        region = "Asia"
+        ("cost", [
+            "costs",
+            "cost",
+            "expenses",
+            "expense"
+        ]),
+
+        ("churn", [
+            "customer churn",
+            "churn",
+            "attrition"
+        ])
+    ]
+
+    for metric, words in metric_patterns:
+
+        for word in words:
+
+            if re.search(
+                rf"\b{re.escape(word)}\b",
+                question_lower
+            ):
+                return metric
+
+    return None
 
 
-    # =====================================================
-    # METRIC
-    # =====================================================
+# =========================================================
+# FIND REGION
+# =========================================================
 
-    metric = None
+def extract_region(question_lower):
+    """
+    Convert regional language into
+    standard MetricMind region names.
+    """
 
-    if re.search(r"\bmargin\b|\bmargins\b", question_lower):
-        metric = "margin"
+    for region, words in REGION_SYNONYMS.items():
 
-    elif re.search(r"\brevenue\b", question_lower):
-        metric = "revenue"
+        for word in words:
 
-    elif re.search(r"\bcost\b|\bcosts\b", question_lower):
-        metric = "cost"
+            if re.search(
+                rf"\b{re.escape(word)}\b",
+                question_lower
+            ):
+                return region
 
-    elif re.search(r"\bchurn\b", question_lower):
-        metric = "churn"
+    return None
 
 
-    # =====================================================
-    # QUARTERS
-    # =====================================================
+# =========================================================
+# FIND QUARTERS
+# =========================================================
+
+def extract_quarters(question_lower):
+    """
+    Extract explicit quarters such as Q1, Q2, Q3, Q4.
+    """
 
     quarters = re.findall(
         r"\bq[1-4]\b",
         question_lower
     )
 
+    quarters = [
+        quarter.upper()
+        for quarter in quarters
+    ]
+
     previous_quarter = None
     current_quarter = None
 
     if len(quarters) >= 2:
 
-        previous_quarter = quarters[0].upper()
-        current_quarter = quarters[1].upper()
+        previous_quarter = quarters[0]
+        current_quarter = quarters[1]
 
     elif len(quarters) == 1:
 
-        current_quarter = quarters[0].upper()
+        current_quarter = quarters[0]
+
+    return previous_quarter, current_quarter
 
 
-    # =====================================================
-    # INTENT
-    # =====================================================
+# =========================================================
+# FIND INTENT
+# =========================================================
+
+def extract_intent_type(question_lower):
+    """
+    Determine whether the user wants:
+    - comparison
+    - metric lookup
+    """
 
     comparison_words = [
         "compare",
+        "comparison",
         "change",
         "changed",
         "difference",
@@ -86,24 +190,75 @@ def extract_intent(question: str):
         "decreased",
         "decline",
         "declined",
+        "growth",
+        "grew",
         "performance",
         "between",
         "from",
-        "why"
+        "why",
+        "how did"
     ]
 
-    if any(word in question_lower for word in comparison_words):
+    for word in comparison_words:
 
-        intent = "comparison"
+        if word in question_lower:
 
-    else:
+            return "comparison"
 
-        intent = "metric_lookup"
+    return "metric_lookup"
 
 
-    # =====================================================
+# =========================================================
+# MAIN INTENT EXTRACTION
+# =========================================================
+
+def extract_intent(question: str):
+    """
+    Extract structured business intent
+    from a natural-language question.
+
+    Returns:
+
+        region
+        metric
+        previous_quarter
+        current_quarter
+        intent
+    """
+
+    question_lower = question.lower().strip()
+
+    # -----------------------------------------------------
+    # REGION
+    # -----------------------------------------------------
+
+    region = extract_region(question_lower)
+
+    # -----------------------------------------------------
+    # METRIC
+    # -----------------------------------------------------
+
+    metric = extract_metric(question_lower)
+
+    # -----------------------------------------------------
+    # QUARTERS
+    # -----------------------------------------------------
+
+    previous_quarter, current_quarter = extract_quarters(
+        question_lower
+    )
+
+    # -----------------------------------------------------
+    # INTENT
+    # -----------------------------------------------------
+
+    intent = extract_intent_type(
+        question_lower
+    )
+
+    # -----------------------------------------------------
     # RETURN STRUCTURED INTENT
-    # =====================================================
+    # -----------------------------------------------------
 
     return {
         "region": region,
